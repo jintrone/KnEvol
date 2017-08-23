@@ -1,6 +1,6 @@
 package edu.msu.mi.knevol.agents
 
-import akka.actor.{Stash, Actor, ActorRef, Props}
+import akka.actor._
 import akka.util.Timeout
 import edu.msu.mi.knevol.universe.{Wire, BasicUniverse, StateVar, Node}
 
@@ -11,41 +11,42 @@ import akka.pattern.ask
 import concurrent.duration._
 
 /**
- * Created by josh on 10/21/15.
- */
-class GodAgent(
-                universeSize: Int = 20,
-                universeDegree: Int = 3,
-                observableState: Int = 10,
-                population: Int = 100,
-                brainSize: Int = 15,
-                contextSize: Int = 10,
-                numInterests: Int =1,
-                socialDegree: Int = 10,
-                notes:String = "",
-                scribe:ActorRef) extends Actor with Stash {
+  * Created by josh on 10/21/15.
+  */
+class GodAgent(nodes: Array[Node],
+               observableState: Int = 10,
+               population: Int = 100,
+               brainSize: Int = 15,
+               contextSize: Int = 10,
+               numInterests: Int = 1,
+               socialDegree: Int = 10,
+               similarityWeight: Float = .1f,
+               notes: String = "",
+               scribe: ActorRef) extends Actor with Stash {
 
   import context.dispatcher
 
   implicit val timeout = Timeout(1 minute)
 
+  var universeDegree = nodes.map(_.neighbors.size).sum / nodes.size
+  var universeSize = nodes.size
 
-  var universe: ActorRef = context.actorOf(GodAgent.createUniverse("ActualUniverse",universeSize, universeDegree, observableState))
-  var agents: Array[ActorRef] = (0 until population).toArray.map(x=>context.actorOf(GodAgent.createAgent(s"Agent$x",universe, universeDegree, brainSize,  observableState, contextSize,numInterests)))
+  var universe: ActorRef = context.actorOf(GodAgent.createUniverse("ActualUniverse", nodes, observableState))
+  var agents: Map[String, ActorRef] = (0 until population).toArray.map(x => s"Agent$x" -> context.actorOf(GodAgent.createAgent(s"Agent$x", universe,
+    universeDegree, brainSize, observableState, contextSize, numInterests, similarityWeight)))(collection.breakOut): Map[String, ActorRef]
   var stop = 0
   var simId = -1
-
 
 
   override def receive: Receive = {
     case Init =>
       val returnTo = sender()
-      (scribe ? InitRun(universeSize,universeDegree,observableState,population,brainSize,contextSize,numInterests,socialDegree,notes)).mapTo[Int] flatMap {
+      (scribe ? InitRun(universeSize, universeDegree, observableState, population, brainSize, contextSize, numInterests, socialDegree, notes, similarityWeight)).mapTo[Int] flatMap {
         x =>
           println(s"Set simulation id $x")
           simId = x
-          val wire = Future.sequence(for (target: ActorRef <- agents.toIndexedSeq) yield {
-            val sources = agents.toSet - target
+          val wire = Future.sequence(for (target: ActorRef <- agents.values.toIndexedSeq) yield {
+            val sources = agents.values.toSet - target
             target ? Wire(Random.shuffle(sources).toList take socialDegree)
           })
 
@@ -61,11 +62,11 @@ class GodAgent(
 
     case Go(rounds: Int) =>
       stop = rounds
-      kickoff(0,sender())
+      kickoff(0, sender())
 
 
-    case x:AgentUpdate =>
-      scribe forward AgentUpdate(simId,x.round,x.name,x.interests,x.fitness,x.fitnessChange,x.updateBy)
+    case x: AgentUpdate =>
+      scribe forward AgentUpdate(simId, x.round, x.name, x.interests, x.fitness, x.fitnessChange, x.updateBy)
 
 
     case _ =>
@@ -73,8 +74,7 @@ class GodAgent(
   }
 
 
-
-  def kickoff(round: Int,ref:ActorRef): Unit = {
+  def kickoff(round: Int, ref: ActorRef): Unit = {
     println(s"Round $round")
     if (round == stop) {
       println("Done!")
@@ -82,16 +82,16 @@ class GodAgent(
       ref ! "Done"
     } else {
       for {
-        x <- Future.sequence(for (x <- agents.toIndexedSeq) yield {
+        x <- Future.sequence(for (x <- agents.values.toIndexedSeq) yield {
 
           x ? Learn(round)
         })
-        y <- Future.sequence(for (x <- agents.toIndexedSeq) yield {
+        y <- Future.sequence(for (x <- agents.values.toIndexedSeq) yield {
 
           x ? Update
         })
       } yield {
-        kickoff(round + 1,ref)
+        kickoff(round + 1, ref)
       }
     }
 
@@ -101,15 +101,43 @@ class GodAgent(
 
 object GodAgent {
 
-  def createUniverse(name:String, universeSize: Int, degree: Int, observable: Int): Props = Props(new BasicUniverse(name,universeSize, degree, observable))
 
-  def createAgent(name:String,
+  def apply(universeSize: Int = 20,
+            universeDegree: Int = 3,
+            observableState: Int = 10,
+            population: Int = 100,
+            brainSize: Int = 15,
+            contextSize: Int = 10,
+            numInterests: Int = 1,
+            socialDegree: Int = 10,
+            similarityWeight: Float = .1f,
+            notes: String = "",
+            scribe: ActorRef) = {
+
+    val nodes = (for (i <- 0 until universeSize) yield new Node(i, universeSize, universeDegree)).toArray
+    new GodAgent(nodes,
+      observableState,
+      population,
+      brainSize,
+      contextSize,
+      numInterests,
+      socialDegree,
+      similarityWeight,
+      notes,
+      scribe: ActorRef)
+  }
+
+
+  def createUniverse(name: String, nodes: Array[Node], observable: Int): Props = Props(new BasicUniverse(name, observable, nodes))
+
+  def createAgent(name: String,
                   universe: ActorRef,
                   brainDegree: Int,
                   brainSize: Int,
                   observableSize: Int,
                   contextSize: Int,
-                   numInterests:Int): Props = Props(new SimpleAgent(name, universe, brainSize, brainDegree, observableSize, contextSize,numInterests))
+                  numInterests: Int,
+                  similarityWeight: Float): Props = Props(new SimpleAgent(name, universe, brainSize, brainDegree, observableSize, contextSize, numInterests, .5, .5, .7, similarityWeight))
 
 
 }

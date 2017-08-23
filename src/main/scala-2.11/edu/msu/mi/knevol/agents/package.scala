@@ -11,6 +11,7 @@ package object agents {
   case object Update
   case object GiveMeYourBrain
   case object WhatAreYourInterests
+  case object WhatIsYourFitness
   case class Learn(round:Int)
   case class AskAbout(state: BitSet)
   case class Go(rounds:Int)

@@ -16,7 +16,7 @@ import scala.util.{Failure, Success, Random}
 object AgentLauncher extends App {
 
 
-  implicit val timeout = Timeout(300 seconds)
+  implicit val timeout = Timeout(2 hours)
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -24,9 +24,14 @@ object AgentLauncher extends App {
   val system = ActorSystem("TestUniverse")
   val scribe = system.actorOf(Props(new ScribeAgent))
 
+  val universeSize = 20
+  val universeDegree = 8
 
+  val nodes =  (for (i <- 0 until universeSize) yield new Node(i, universeSize, universeDegree)).toArray
 
-  var params = List(
+  var params = List(100,200,300,400,500).sortBy{x=>x}.map {size=>
+    Params(20, 3, 10, 100, 15, 10, 3, (.8*size).toInt, s"high deg fixed network 4, size=$size",.5,5)
+  }
 
     //checking k
     //Params(10, 1, 10, 10, 10, 1, 10, "Random neighbor", 10),
@@ -48,8 +53,9 @@ object AgentLauncher extends App {
     //hidden state, increasingly capable agents
     //Params(20, 3, 10, 10, 10, 3, 10, "Random neighbor", 10),
     //Params(20, 3, 10, 12, 10, 3, 10, "Random neighbor", 2),
-    Params(20, 3, 10, 15, 10, 3, 10, "Choose 5 similar neighbor", 10)
-  )
+
+
+
 
   var fSerial = Future[Any] {
     ()
@@ -58,19 +64,23 @@ object AgentLauncher extends App {
 
   Await.result(fSerial, 3 hours)
 
+
+
   def runSystem(p: Params): Future[Any] = {
 
     println("Letting the system spin up...")
     val god = system.actorOf(Props(
       new GodAgent(
-        universeSize = p.universeSize,
-        universeDegree = p.universeDegree,
+        nodes,
         observableState = p.observableState,
+      population = p.population,
         brainSize = p.brainSize,
         contextSize = p.contextSize,
         numInterests = p.numInterests,
         socialDegree = p.socialDegree,
-        notes = p.notes, scribe=scribe)))
+        similarityWeight=p.similarity.toFloat,
+        notes = p.notes,
+        scribe=scribe)))
 
     Thread.sleep(5000)
 
@@ -93,12 +103,16 @@ object AgentLauncher extends App {
 
 }
 
+
+
 case class Params(universeSize: Int = 20,
                   universeDegree: Int = 3,
                   observableState: Int = 10,
+                 population: Int = 100,
                   brainSize: Int = 15,
                   contextSize: Int = 10,
                   numInterests: Int = 1,
                   socialDegree: Int = 10,
                   notes: String = "",
+                 similarity:Double=.1,
                   count: Int = 10)

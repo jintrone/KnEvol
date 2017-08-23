@@ -51,13 +51,13 @@ class Node(val ordinal:Int, universe:Int,var neighbors:mutable.Buffer[Int], var 
   def rewire(prob:Double):Unit= {
     if (Random.nextDouble()<prob) {
       if ((Random.nextBoolean() || neighbors.isEmpty) && neighbors.length < universe-1) {
-       // println(s"Adding new neighbor in $this")
+
         val list:Array[Int] =((0 until universe).toBuffer -- (neighbors:+ordinal)).toArray[Int]
-        neighbors+= list(Random.nextInt(list.length))
+        list(Random.nextInt(list.length))+=:neighbors
         function = for ((k,v)<-function) yield (k.map(_+1)(BitSet.canBuildFrom),v)
         function ++= (for ((k,v)<-function) yield (k+0,v))
       } else {
-        //println(s"Removing neighbor in $this")
+
         val toremove:Int = Random.nextInt(neighbors.size)
         neighbors.remove(toremove)
         //we're going to do some damage to the function here, so just

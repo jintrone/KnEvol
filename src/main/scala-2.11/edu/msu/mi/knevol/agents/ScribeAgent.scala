@@ -29,7 +29,8 @@ case class InitRun(universeSize: Int,
                    contextSize: Int,
                    numInterests: Int,
                    socialDegree: Int,
-                    notes:String="")
+                    notes:String="",
+                    similarityWeight:Float)
 
 case class AgentUpdate(simId:Int,
                        round: Int,
@@ -48,7 +49,7 @@ class ScribeAgent extends Actor {
   val db = Database.forURL("jdbc:mysql://localhost:3306/knevol2", driver = "com.mysql.jdbc.Driver", user = "knevol", password = "knevol",
     executor = AsyncExecutor("test1", numThreads=10, queueSize=100000))
 
-  class SimulationRun(tag: Tag) extends Table[(Int, Timestamp, Int, Int, Int, Int, Int, Int, Int, Int, String)](tag, "SIMULATION_RUN") {
+  class SimulationRun(tag: Tag) extends Table[(Int, Timestamp, Int, Int, Int, Int, Int, Int, Int, Int, String, Float)](tag, "SIMULATION_RUN") {
     def id = column[Int]("SIM_ID", O.PrimaryKey, O.AutoInc)
 
     // This is the primary key column
@@ -72,8 +73,10 @@ class ScribeAgent extends Actor {
 
     def notes = column[String]("NOTES")
 
+    def similarityWeight = column[Float]("SIMILARITY_WEIGHT")
+
     // Every table needs a * projection with the same type as the table's type parameter
-    def * = (id, date, universeSize, universeDegree, observableState, population, brainSize, contextSize, numInterests, socialDegree, notes)
+    def * = (id, date, universeSize, universeDegree, observableState, population, brainSize, contextSize, numInterests, socialDegree, notes,similarityWeight)
   }
 
   val simrun = TableQuery[SimulationRun]
@@ -124,11 +127,12 @@ class ScribeAgent extends Actor {
     contextSize: Int,
     numInterests:Int,
     socialDegree: Int,
-    notes:String ) =>
+    notes:String,
+    similarityWeight:Float) =>
       val returnTo= sender()
       println("Trying to update sim table")
       db.run {
-        (simrun returning simrun.map(_.id)) +=(0, new Timestamp(System.currentTimeMillis()), universeSize, universeDegree, observableState, population, brainSize, contextSize, numInterests, socialDegree,notes)
+        (simrun returning simrun.map(_.id)) +=(0, new Timestamp(System.currentTimeMillis()), universeSize, universeDegree, observableState, population, brainSize, contextSize, numInterests, socialDegree,notes,similarityWeight)
       } onComplete {
         case Success(x) =>
           println(s"Received simulation init $x")
