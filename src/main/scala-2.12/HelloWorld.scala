@@ -25,6 +25,6 @@ object Main extends App {
   helloActor ! "buenos dias"
 
   // shut down the system
-  system.shutdown
+  system.terminate()
 
 }

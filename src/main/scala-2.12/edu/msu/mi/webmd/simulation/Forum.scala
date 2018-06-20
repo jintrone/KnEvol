@@ -106,7 +106,7 @@ class Forum(maxSteps:Int = 100) extends Actor {
     }
     if (step == maxSteps) {
       inspectForum
-      context.system.shutdown()
+      context.system.terminate()
     }
 
 
