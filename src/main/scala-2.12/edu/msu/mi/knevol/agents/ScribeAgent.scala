@@ -28,9 +28,9 @@ case class InitRun(universeSize: Int,
                    brainSize: Int,
                    contextSize: Int,
                    numInterests: Int,
-                   socialDegree: Int,
-                    notes:String="",
-                    similarityWeight:Float)
+                   diversityExponent: Double,
+                   neightborsToCheck: Int,
+                    notes:String="")
 
 case class AgentUpdate(simId:Int,
                        round: Int,
@@ -46,10 +46,10 @@ case object Shutdown
 class ScribeAgent extends Actor {
 
 
-  val db = Database.forURL("jdbc:mysql://localhost:3306/knevol2", driver = "com.mysql.jdbc.Driver", user = "knevol", password = "knevol",
+  val db = Database.forURL("jdbc:mysql://localhost:3306/knevol3", driver = "com.mysql.jdbc.Driver", user = "knevol", password = "knevol",
     executor = AsyncExecutor("test1", numThreads=10, queueSize=100000))
 
-  class SimulationRun(tag: Tag) extends Table[(Int, Timestamp, Int, Int, Int, Int, Int, Int, Int, Int, String, Float)](tag, "SIMULATION_RUN") {
+  class SimulationRun(tag: Tag) extends Table[(Int, Timestamp, Int, Int, Int, Int, Int, Int, Int,  Double, Int, String)](tag, "SIMULATION_RUN") {
     def id = column[Int]("SIM_ID", O.PrimaryKey, O.AutoInc)
 
     // This is the primary key column
@@ -69,14 +69,18 @@ class ScribeAgent extends Actor {
 
     def numInterests = column[Int]("NUM_INTERESTS")
 
-    def socialDegree = column[Int]("SOC_DEGREE")
+   // def socialDegree = column[Int]("SOC_DEGREE")
+
+    def diversityExponent = column[Double]("SIMILARITY_WEIGHT")
+
+    def neighborsToCheck = column[Int]("NEIBORS_TO_CHECK")
 
     def notes = column[String]("NOTES")
 
-    def similarityWeight = column[Float]("SIMILARITY_WEIGHT")
+
 
     // Every table needs a * projection with the same type as the table's type parameter
-    def * = (id, date, universeSize, universeDegree, observableState, population, brainSize, contextSize, numInterests, socialDegree, notes,similarityWeight)
+    def * = (id, date, universeSize, universeDegree, observableState, population, brainSize, contextSize, numInterests, diversityExponent, neighborsToCheck, notes)
   }
 
   val simrun = TableQuery[SimulationRun]
@@ -126,13 +130,13 @@ class ScribeAgent extends Actor {
     brainSize: Int,
     contextSize: Int,
     numInterests:Int,
-    socialDegree: Int,
-    notes:String,
-    similarityWeight:Float) =>
+    diversityExponent:Double,
+    neightborsToCheck:Int,
+    notes:String) =>
       val returnTo= sender()
       println("Trying to update sim table")
       db.run {
-        (simrun returning simrun.map(_.id)) +=(0, new Timestamp(System.currentTimeMillis()), universeSize, universeDegree, observableState, population, brainSize, contextSize, numInterests, socialDegree,notes,similarityWeight)
+        (simrun returning simrun.map(_.id)) +=(0, new Timestamp(System.currentTimeMillis()), universeSize, universeDegree, observableState, population, brainSize, contextSize, numInterests, diversityExponent,neightborsToCheck,notes)
       } onComplete {
         case Success(x) =>
           println(s"Received simulation init $x")

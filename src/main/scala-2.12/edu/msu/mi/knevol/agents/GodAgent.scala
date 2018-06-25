@@ -19,8 +19,8 @@ class GodAgent(nodes: Array[Node],
                brainSize: Int = 15,
                contextSize: Int = 10,
                numInterests: Int = 1,
-               socialDegree: Int = 10,
-               similarityWeight: Float = .1f,
+               diversityExponent:Double = .1,
+               neighborsToCheck: Int = 10,
                notes: String = "",
                scribe: ActorRef) extends Actor with Stash {
 
@@ -33,7 +33,7 @@ class GodAgent(nodes: Array[Node],
 
   var universe: ActorRef = context.actorOf(GodAgent.createUniverse("ActualUniverse", nodes, observableState))
   var agents: Map[String, ActorRef] = (0 until population).toArray.map(x => s"Agent$x" -> context.actorOf(GodAgent.createAgent(s"Agent$x", universe,
-    universeDegree, brainSize, observableState, contextSize, numInterests, similarityWeight)))(collection.breakOut): Map[String, ActorRef]
+    universeDegree, brainSize, observableState, contextSize, numInterests, diversityExponent,neighborsToCheck)))(collection.breakOut): Map[String, ActorRef]
   var stop = 0
   var simId = -1
 
@@ -41,16 +41,17 @@ class GodAgent(nodes: Array[Node],
   override def receive: Receive = {
     case Init =>
       val returnTo = sender()
-      (scribe ? InitRun(universeSize, universeDegree, observableState, population, brainSize, contextSize, numInterests, socialDegree, notes, similarityWeight)).mapTo[Int] flatMap {
+      (scribe ? InitRun(universeSize, universeDegree, observableState, population, brainSize, contextSize, numInterests, diversityExponent, neighborsToCheck, notes)).mapTo[Int] flatMap {
         x =>
           println(s"Set simulation id $x")
           simId = x
           val wire = Future.sequence(for (target: ActorRef <- agents.values.toIndexedSeq) yield {
-            val sources = agents.values.toSet - target
-            target ? Wire(Random.shuffle(sources).toList take socialDegree)
+            val sources = (agents.values.toSet - target).toArray
+            target ? Wire(sources)
           })
 
           wire onSuccess {
+
             case x =>
               returnTo ! "OK"
               println("Ready!")
@@ -109,8 +110,8 @@ object GodAgent {
             brainSize: Int = 15,
             contextSize: Int = 10,
             numInterests: Int = 1,
-            socialDegree: Int = 10,
-            similarityWeight: Float = .1f,
+            diversityExponent: Double = 1.0d,
+            neighborsToCheck: Int = 10,
             notes: String = "",
             scribe: ActorRef) = {
 
@@ -121,8 +122,8 @@ object GodAgent {
       brainSize,
       contextSize,
       numInterests,
-      socialDegree,
-      similarityWeight,
+      diversityExponent,
+      neighborsToCheck,
       notes,
       scribe: ActorRef)
   }
@@ -137,7 +138,8 @@ object GodAgent {
                   observableSize: Int,
                   contextSize: Int,
                   numInterests: Int,
-                  similarityWeight: Float): Props = Props(new SimpleAgent(name, universe, brainSize, brainDegree, observableSize, contextSize, numInterests, .5, .5, .7, similarityWeight))
+                  diversityExponent: Double,
+                  neighborsToCheck:Int): Props = Props(new SimpleAgent(name, universe, brainSize, brainDegree, observableSize, contextSize, numInterests, .5, .5, .7, diversityExponent, neighborsToCheck))
 
 
 }

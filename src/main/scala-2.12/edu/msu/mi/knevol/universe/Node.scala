@@ -72,6 +72,10 @@ class Node(val ordinal:Int, universe:Int,var neighbors:mutable.Buffer[Int], var 
     function = for ((k:BitSet,v:Boolean)<-node.function) yield (BitSet()++k,v)
   }
 
+  def dump() : String = {
+    ""
+  }
+
 
   if (neighbors.nonEmpty && function.isEmpty) init()
 

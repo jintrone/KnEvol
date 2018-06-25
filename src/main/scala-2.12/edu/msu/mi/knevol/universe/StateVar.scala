@@ -38,16 +38,16 @@ class StateVar(node:Node) extends Actor {
       sender ! "OK"
 
     case Advance =>
-
+      //println(s"${this} Node advance")
       node.currentState = Some(node.calculatedState.get)
       sender ! "OK"
 
     case Update =>
-
+      //println(s"${this} Node update")
       //capture this here
       val s = sender()
       val f = Future.sequence(for (a<-neighbors.toList) yield a? StateRequest )
-      f onSuccess {
+      f onSuccess   {
 
         case results =>
 

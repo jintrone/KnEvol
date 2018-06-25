@@ -45,18 +45,18 @@ object UniverseTest extends App {
 
 
 
-  def edgeTransformer(innerEdge: Graph[BitSet, DiEdge]#EdgeT): Option[(DotGraph, DotEdgeStmt)] = {
-    val edge = innerEdge.edge
-    Some((root, DotEdgeStmt(NodeId(convert(edge.from.value.asInstanceOf[BitSet])), NodeId(convert(edge.to.value.asInstanceOf[BitSet])), Nil)))
-
-  }
+//  def edgeTransformer(innerEdge: Graph[BitSet, DiEdge]#EdgeT): Option[(DotGraph, DotEdgeStmt)] = {
+//    val edge = innerEdge.edge
+//    Some((root, DotEdgeStmt(NodeId(convert(edge.from.value.asInstanceOf[BitSet])), NodeId(convert(edge.to.value.asInstanceOf[BitSet])), Nil)))
+//
+//  }
 
   for (degree<-1 to 10) {
     val universe = system.actorOf(Props(new BasicUniverse("TestUniverse",nodes, degree, 10)))
     Await.result(Future.sequence(for (i: Int <- 0 until Math.pow(2, 10).toInt) yield universe ? Probe(Set(convert(i)))), 20 seconds)
     val g = Await.result((universe ? GiveMeYourWorld).mapTo[Graph[BitSet, DiEdge]], 20 seconds)
     println(s"Found ${g.nodes count (_.outDegree > 1)} nodes with outdegree > 1")
-    writeToFile(s"StateGraphK$degree.dot", s"${g.toDot(root, edgeTransformer)}")
+   // writeToFile(s"StateGraphK$degree.dot", s"${g.toDot(root, edgeTransformer)}")
     system.stop(universe)
   }
 

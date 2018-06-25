@@ -24,13 +24,13 @@ object AgentLauncher extends App {
   val system = ActorSystem("TestUniverse")
   val scribe = system.actorOf(Props(new ScribeAgent))
 
-  val universeSize = 20
+  val universeSize = 15
   val universeDegree = 8
 
   val nodes =  (for (i <- 0 until universeSize) yield new Node(i, universeSize, universeDegree)).toArray
 
-  var params = List(100,200,300,400,500).sortBy{x=>x}.map {size=>
-    Params(20, 3, 10, 100, 15, 10, 3, (.8*size).toInt, s"high deg fixed network 4, size=$size",.5,5)
+  var params = (0.0 until 2.0 by 0.25 toList).map {diversity=>
+    Params(universeSize, universeDegree, 15,  100, 15, 15, 1, diversity,10, s"diversity tight coupling",5)
   }
 
     //checking k
@@ -73,12 +73,12 @@ object AgentLauncher extends App {
       new GodAgent(
         nodes,
         observableState = p.observableState,
-      population = p.population,
+        population = p.population,
         brainSize = p.brainSize,
         contextSize = p.contextSize,
         numInterests = p.numInterests,
-        socialDegree = p.socialDegree,
-        similarityWeight=p.similarity.toFloat,
+        diversityExponent = p.diversityExponent,
+        neighborsToCheck = p.neighborsToCheck,
         notes = p.notes,
         scribe=scribe)))
 
@@ -108,11 +108,11 @@ object AgentLauncher extends App {
 case class Params(universeSize: Int = 20,
                   universeDegree: Int = 3,
                   observableState: Int = 10,
-                 population: Int = 100,
+                  population: Int = 100,
                   brainSize: Int = 15,
                   contextSize: Int = 10,
                   numInterests: Int = 1,
-                  socialDegree: Int = 10,
+                  diversityExponent: Double = 1.0d,
+                  neighborsToCheck: Int = 10,
                   notes: String = "",
-                 similarity:Double=.1,
                   count: Int = 10)

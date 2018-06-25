@@ -4,20 +4,21 @@ import akka.actor.{Actor, ActorRef, Props}
 import akka.pattern.ask
 import akka.util.Timeout
 import edu.msu.mi.knevol.universe.{Node, _}
+import org.apache.commons.math3.distribution.{IntegerDistribution, UniformIntegerDistribution, ZipfDistribution}
 
-import scala.collection.{BitSet, mutable, breakOut}
+import scala.collection.{BitSet, breakOut, mutable}
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.util.{Failure, Success, Random}
+import scala.util.{Failure, Random, Success}
 
 
 /**
  * Created by josh on 10/16/15.
  */
 class SimpleAgent(name: String,
-                  universe: ActorRef,
+                  theuniverse: ActorRef,
                   brainSize: Int,
                   brainDegree: Int,
                   observableSize: Int,
@@ -26,14 +27,17 @@ class SimpleAgent(name: String,
                   rewireProb: Double = .2,
                   mutationProb: Double = .1,
                   approachProb: Double = .7,
-                   similarityWeight:Double = .1,
-                 //note that epsilon is applied wherever this agent is attempting to
-                 //make a decision about the fitness of a particular brain
-                   epsilon:Double = .1) extends Actor {
+                  diversityExponent:Double = .1,
+                  neighborsToCheck: Int = 10,
+                  //note that epsilon is applied wherever this agent is attempting to
+                  //make a decision about the fitness of a particular brain
+                  epsilon:Double = .1) extends Actor {
 
 
-  var brain = context.actorOf(SimpleAgent.createBrain(s"${name}_brain", brainSize, brainDegree))
+  var brain: ActorRef = context.actorOf(SimpleAgent.createBrain(s"${name}_brain", brainSize, brainDegree))
   var nextBrain: Option[ActorRef] = None
+  var distribution: Option[IntegerDistribution] = None
+
 
 
   var localContext: List[Int] = (Random.shuffle(0 to observableSize).toList take contextSize).sortBy(x => x)
@@ -56,12 +60,24 @@ class SimpleAgent(name: String,
   override def receive: Receive = {
 
     case Wire(neighbors: Iterable[ActorRef]) =>
+
+      //TODO this should
+      //val uf = (theuniverse ? Probe(interests)).mapTo[Map[BitSet, ListBuffer[BitSet]]]
+
+
       this.neighbors = neighbors.toArray
+      distribution = Some(if (diversityExponent == 0) {
+        new UniformIntegerDistribution(1,this.neighbors.length)
+      }  else {
+        new ZipfDistribution(this.neighbors.length,diversityExponent)
+      })
       val returnTo = sender()
 
       //This is new!
       val bf = (brain ? Probe(interests)).mapTo[Map[BitSet, ListBuffer[BitSet]]]
-      val uf = (universe ? Probe(interests)).mapTo[Map[BitSet, ListBuffer[BitSet]]]
+      val uf = (theuniverse ? Probe(interests)).mapTo[Map[BitSet, ListBuffer[BitSet]]]
+
+      //TODO this needs to come back as a list rather than a set
       val neighborInterests = Future.sequence(neighbors.map(f => (f ? WhatAreYourInterests).mapTo[Set[BitSet]]))
 
       for {
@@ -78,7 +94,7 @@ class SimpleAgent(name: String,
         neighborSimilarity = neighbors.zip(
           x.map { otherI =>
             val tmp = interests.flatMap { myI =>
-              otherI.map(ni => ((myI, ni), (myI & ni).size.toFloat / (myI ++ ni).size.toFloat))
+              otherI.map(ni => ((myI, ni), jaccard(myI,ni,observableSize)))
             }.to[ListBuffer].sortBy { b => -b._2 }
 
             tmp.foldLeft(ListBuffer[((BitSet,BitSet),Float)]()) { (a, b) =>
@@ -91,10 +107,9 @@ class SimpleAgent(name: String,
             }.map(_._2).sum / interests.size.toFloat
           })(breakOut): Map[ActorRef, Float]
         this.neighbors = this.neighbors.sortBy { n =>
-          -neighborSimilarity(n)
+          neighborSimilarity(n)
         }
         //println(s"Best = ${neighborSimilarity(this.neighbors(0))}, worst = ${neighborSimilarity(this.neighbors(this.neighbors.length-1))} ")
-
         returnTo ! "OK"
       }
 
@@ -103,11 +118,11 @@ class SimpleAgent(name: String,
       val returnTo = sender()
 
       val bf = (brain ? Probe(interests)).mapTo[Map[BitSet, ListBuffer[BitSet]]]
-      val uf = (universe ? Probe(interests)).mapTo[Map[BitSet, ListBuffer[BitSet]]]
-      //val neighborsToExamine = selectNeighbors()
-     // val nf = Future.sequence(for (n <- neighborsToExamine) yield (n ? Probe(interests)).mapTo[Map[BitSet, ListBuffer[BitSet]]])
+      val uf = (theuniverse ? Probe(interests)).mapTo[Map[BitSet, ListBuffer[BitSet]]]
+      val neighborsToExamine = selectNeighbors()
+      //val nf = Future.sequence(for (n <- neighborsToExamine) yield (n ? Probe(interests)).mapTo[Map[BitSet, ListBuffer[BitSet]]])
 
-      val nf = Future.sequence(neighbors.toList.map(n=>(n?WhatIsYourFitness).mapTo[Double]))
+      val nf = Future.sequence(neighborsToExamine.toList.map(n=>(n?WhatIsYourFitness).mapTo[Double]))
       // val nf = (neighbor ? Probe(interests)).mapTo[Map[BitSet, ListBuffer[mutable.BitSet]]]
 
 
@@ -118,26 +133,11 @@ class SimpleAgent(name: String,
       } yield {
         //my current fitness on the new probe
         updateFitness(compareSeveral(actual, brainPrediction))
-
-
-        //Pick the best neighbor that beats my current fitness
-        var best:Option[ActorRef] = None
-        (neighbors zip (neighbors.map(neighborSimilarity(_)) zip neighborFiteness).map(x=>getAgentDesirability(x._1,x._2))).foldLeft(currentFitness.perceived) {
-          (bestFitness:Double,candidate:(ActorRef,Double)) =>
-            if (bestFitness<candidate._2) {
-              best = Some(candidate._1)
-              candidate._2
-            }
-            bestFitness
-        }
-
-        //The following gives me a new candidate brain
-
-
-        if (best.isDefined) {
+        var best = (neighborsToExamine zip neighborFiteness).reduceLeft((x,y)=> if (x._2 <= y._2) y else x)
+        if (best._2 > currentFitness.perceived) {
           improvement = "Neightbor"
 
-          attemptTolearnFromNeighbor(best.get)
+          attemptTolearnFromNeighbor(best._1)
         } else {
           improvement = "Myself"
           attemptTolearnByMyself()
@@ -223,7 +223,7 @@ class SimpleAgent(name: String,
     currentFitness = NoisyMeasure(calculation,epsilon)
   }
 
-  def getAgentDesirability(similarity:Double, fitness:Double)=similarityWeight*similarity + (1-similarityWeight)*fitness
+  //def getAgentDesirability(similarity:Double, fitness:Double)=similarityWeight*similarity + (1-similarityWeight)*fitness
 
   def attemptTolearnByMyself(): Future[ActorRef] = {
     for {
@@ -255,7 +255,11 @@ class SimpleAgent(name: String,
 
   }
 
-  def selectNeighbors(): Seq[ActorRef] = neighbors take 5
+  def selectNeighbors(): Seq[ActorRef] = {
+    //commons math zipf distribution is lower bounded at 1, hence the subtraction
+    var n = distribution.get.sample(neighborsToCheck).toSet[Int].map(_-1)
+    n.map(neighbors).toList
+  }
 
   //def selectNeighbors(): Seq[ActorRef] = neighbors
 

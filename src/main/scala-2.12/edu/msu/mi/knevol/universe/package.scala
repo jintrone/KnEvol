@@ -56,6 +56,13 @@ package object universe {
 
   }
 
+  def jaccard(x: BitSet, y:BitSet, numBits:Int):Float = {
+    //jaccard difference for fixed size simplifies to ndiffs / total size
+    //trust me.  this took me 2 hours to figure out
+    //yes, i'm a fucking idiot.
+    1.0f - (x ^ y).size / numBits.toFloat
+  }
+
 
 
 }

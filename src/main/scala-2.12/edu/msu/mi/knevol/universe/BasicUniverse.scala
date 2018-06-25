@@ -25,8 +25,8 @@ import scalax.collection.GraphPredef._
 import scalax.collection.GraphEdge._
 
 /**
- * Created by josh on 8/23/15.
- */
+  * Created by josh on 8/23/15.
+  */
 class BasicUniverse(name: String, observable: Int, val nodes: Array[Node]) extends Actor {
 
   import context.dispatcher
@@ -56,7 +56,7 @@ class BasicUniverse(name: String, observable: Int, val nodes: Array[Node]) exten
 
   def safeCopyGraph(): Graph[BitSet, DiEdge] = {
 
-    var result:Graph[BitSet,DiEdge] = Graph.empty
+    var result: Graph[BitSet, DiEdge] = Graph.empty
     attractors.synchronized {
       result = Graph[BitSet, DiEdge]() ++ attractors
     }
@@ -70,17 +70,17 @@ class BasicUniverse(name: String, observable: Int, val nodes: Array[Node]) exten
   def probe(p: ProcessHolder): Future[ListBuffer[BitSet]] = {
     Future.sequence(p.processing.map(_ ? Update).toList) flatMap {
       x =>
-        val next: BitSet = (for ((b: Boolean, count) <- x.zipWithIndex if b) yield count)(collection.breakOut)
+        val next: BitSet = (for ((b: Boolean, count) <- x.zipWithIndex if b) yield count) (collection.breakOut)
         if (p.graph.contains(next)) {
           p.graph += p.last ~> next
 
           safeUpdateGraph(p.graph)
-          processing-=p.probe
+          processing -= p.probe
           p.processing.foreach(context.stop)
-          if (!attractors.contains(p.probe)){
+          if (!attractors.contains(p.probe)) {
             println(s"Attractors missing ${p.probe}")
           }
-          Future(composeStateSequence(p.probe,p.graph))
+          Future(composeStateSequence(p.probe, p.graph))
           //add next to graph
         } else {
           p.graph += p.last ~> next
@@ -95,7 +95,7 @@ class BasicUniverse(name: String, observable: Int, val nodes: Array[Node]) exten
 
   override def receive: Receive = {
     case Probe(probe: Set[BitSet]) =>
-
+      //println(s"Recevied a probe ${probe} in brain ${name}")
       val returnTo = sender()
       val probeAsList = probe.toList
 
@@ -104,14 +104,14 @@ class BasicUniverse(name: String, observable: Int, val nodes: Array[Node]) exten
         if (attractors.contains(actualProbe)) {
           Future(
             try {
-              composeStateSequence(actualProbe,attractors)
+              composeStateSequence(actualProbe, attractors)
             } catch {
 
-              case x:NoSuchElementException=>
+              case x: NoSuchElementException =>
                 println(s"${attractors.nodes}")
                 throw x
 
-              case y:Throwable =>
+              case y: Throwable =>
                 println("no clue")
                 throw y
 
@@ -129,10 +129,10 @@ class BasicUniverse(name: String, observable: Int, val nodes: Array[Node]) exten
           p.calculation = Some(f)
           p.calculation.get
         }
-      }) onComplete  {
+      }) onComplete {
         case Success(results) =>
-
-          returnTo ! ((probeAsList zip results)(breakOut): Map[BitSet, ListBuffer[BitSet]])
+          //println(s"Successfully completed probe ${probe} in brain ${name}")
+          returnTo ! ((probeAsList zip results) (breakOut): Map[BitSet, ListBuffer[BitSet]])
 
         case Failure(x) =>
           println(s"Something bad happened $x")
@@ -151,7 +151,7 @@ class BasicUniverse(name: String, observable: Int, val nodes: Array[Node]) exten
   }
 
 
-  def composeStateSequence(probe: BitSet, graph:Graph[BitSet,DiEdge]=attractors, onlyObservable: Boolean = true): ListBuffer[BitSet] = {
+  def composeStateSequence(probe: BitSet, graph: Graph[BitSet, DiEdge] = attractors, onlyObservable: Boolean = true): ListBuffer[BitSet] = {
     var b = ListBuffer[BitSet]()
 
     if (!(graph contains probe)) {
@@ -176,7 +176,9 @@ class BasicUniverse(name: String, observable: Int, val nodes: Array[Node]) exten
   }
 
 
-
+  def dump(): String = {
+     ""
+  }
 
   //println(s"BaseState $baseState")
 
@@ -199,7 +201,7 @@ case class ProcessHolder(probe: BitSet,
 
 
   var calculation: Option[Future[ListBuffer[BitSet]]] = None
-  var last:BitSet = probe
-  graph+=probe
+  var last: BitSet = probe
+  graph += probe
 
 }
